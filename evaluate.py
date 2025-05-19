@@ -1,7 +1,8 @@
+import joblib
 import pandas as pd
 import numpy as np
-import os
-import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -9,238 +10,214 @@ from sklearn.metrics import (
     f1_score,
     matthews_corrcoef,
     confusion_matrix,
-    classification_report,
-    ConfusionMatrixDisplay # Added for your plotting style
+    classification_report
 )
-import matplotlib.pyplot as plt
-import seaborn as sns # Seaborn can also be useful for CMs, but sticking to ConfusionMatrixDisplay as per your snippet
 
-def load_data(file_path, target_column='PATHOLOGY_ENCODED'):
-    """Loads data and separates features (X) and target (y)."""
-    print(f"Loading data from: {file_path}")
-    df = pd.read_csv(file_path)
-    X = df.drop(columns=[target_column])
-    y = df[target_column]
-    print(f"Features shape: {X.shape}, Target shape: {y.shape}")
-    return X, y
+# Paths to models
+log_reg_path = "Models/logistic_regression_model.joblib"
+random_forest_path = "Models/random_forest_model.joblib"
+mlp_classifier_path = "Models/mlp_classifier_model.joblib"
 
-def calculate_all_metrics(y_true, y_pred, class_names, model_name_for_report):
-    """Calculates and returns a dictionary of all specified metrics."""
+# Load the models
+log_reg = joblib.load(log_reg_path)
+random_forest = joblib.load(random_forest_path)
+mlp_classifier = joblib.load(mlp_classifier_path)
+
+print(f"Logistic Regression model loaded from: {log_reg_path}")
+print(f"Random Forest model loaded from: {random_forest_path}")
+print(f"MLP Classifier model loaded from: {mlp_classifier_path}")
+
+# Load test data
+print("Loading test data...")
+test_data_path = "Data/reduced_prepared_test.csv"
+test_df = pd.read_csv(test_data_path)
+X_test = test_df.drop(columns=["PATHOLOGY_ENCODED"])
+y_test = test_df["PATHOLOGY_ENCODED"]
+print(f"Test data loaded with shape: {X_test.shape}")
+
+# Load transformers to get class names
+transformers_path = "Models/transformers.joblib"
+transformers = joblib.load(transformers_path)
+class_names = transformers.get('pathology_encoder_classes')
+print(f"Loaded class names from transformers: {len(class_names)} classes")
+
+# Generate predictions for each model
+print("Generating predictions...")
+y_pred_log_reg = log_reg.predict(X_test)
+y_pred_rf = random_forest.predict(X_test)
+y_pred_mlp = mlp_classifier.predict(X_test)
+
+# Dictionary to store all metrics
+metrics_data = {}
+
+def evaluate_model(name, y_true, y_pred):
+    print(f"\n--- Evaluating {name} ---")
+    
+    # Calculate metrics
     accuracy = accuracy_score(y_true, y_pred)
-    # Using 'weighted' average for precision, recall, F1 to account for label imbalance
-    # This is consistent with how you might want to compare overall model performance
-    precision_w = precision_score(y_true, y_pred, average='weighted', zero_division=0)
-    recall_w = recall_score(y_true, y_pred, average='weighted', zero_division=0)
-    f1_w = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+    precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
     mcc = matthews_corrcoef(y_true, y_pred)
     
-    print(f"\n--- Metrics for Model: {model_name_for_report} ---")
+    # Store metrics for plotting
+    metrics_data[name] = {
+        "Accuracy": accuracy,
+        "Precision": precision,
+        "Recall": recall,
+        "F1-score": f1,
+        "MCC": mcc
+    }
+    
+    # Print metrics
     print(f"Accuracy: {accuracy:.4f}")
-    print(f"Weighted Precision: {precision_w:.4f}")
-    print(f"Weighted Recall: {recall_w:.4f}")
-    print(f"Weighted F1-score: {f1_w:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-score: {f1:.4f}")
     print(f"Matthews Correlation Coefficient: {mcc:.4f}")
-
+    
+    # Print classification report
     print("\nClassification Report:")
-    report_str = classification_report(y_true, y_pred, target_names=class_names, zero_division=0)
-    print(report_str)
+    print(classification_report(y_true, y_pred, zero_division=0))
     
-    metrics_dict = {
-        'Accuracy': accuracy,
-        'Precision (Weighted)': precision_w,
-        'Recall (Weighted)': recall_w,
-        'F1-score (Weighted)': f1_w,
-        'MCC': mcc,
-        'Classification Report': report_str
-    }
-    return metrics_dict
+    # Return confusion matrix for later visualization
+    return confusion_matrix(y_true, y_pred)
 
-if __name__ == "__main__":
-    # Define file paths
-    test_file_path = "Data/reduced_prepared_test.csv"
-    transformers_path = "Models/transformers.joblib"
+# Evaluate each model and store confusion matrices
+cm_log_reg = evaluate_model("Logistic Regression", y_test, y_pred_log_reg)
+cm_rf = evaluate_model("Random Forest", y_test, y_pred_rf)
+cm_mlp = evaluate_model("MLP Classifier", y_test, y_pred_mlp)
 
-    model_paths_and_names = {
-        "Logistic Regression": "Models/logistic_regression_model.joblib",
-        "Random Forest": "Models/random_forest_model.joblib",
-        "MLP Classifier": "Models/mlp_classifier_model.joblib" # Your training script called it MLP Classifier
-    }
+# Create DataFrame for metrics visualization
+metrics_df = pd.DataFrame(metrics_data).T
+
+# PLOT 1: Model Comparison Charts
+fig1 = plt.figure(figsize=(15, 10))
+plt.suptitle("Model Performance Comparison", fontsize=16)
+
+# 1. Bar chart comparing all metrics across models
+ax1 = fig1.add_subplot(2, 1, 1)
+bars = metrics_df.plot(kind='bar', ax=ax1)
+ax1.set_title('All Metrics by Model')
+ax1.set_ylabel('Score')
+ax1.set_ylim(0, 1)
+# Legend in upper right instead of below the graph
+ax1.legend(title='Metric', loc='upper right')
+ax1.grid(axis='y', linestyle='--', alpha=0.7)
+
+# Add numerical values on top of bars
+for container in bars.containers:
+    ax1.bar_label(container, fmt='%.3f', fontsize=8)
+
+# 2. Bar chart for Accuracy only
+ax2 = fig1.add_subplot(2, 1, 2)
+accuracy_values = [metrics_data[model]['Accuracy'] for model in metrics_data.keys()]
+colors = ['green', 'blue', 'purple']
+bars = ax2.bar(list(metrics_data.keys()), accuracy_values, color=colors)
+ax2.set_title('Model Comparison: Accuracy')
+ax2.set_ylabel('Accuracy')
+ax2.set_ylim(0, 1)
+ax2.grid(axis='y', linestyle='--', alpha=0.7)
+
+# Add numerical values on top of accuracy bars
+for i, bar in enumerate(bars):
+    height = bar.get_height()
+    ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+            f'{accuracy_values[i]:.4f}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+
+plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust for suptitle
+plt.show()
+
+# Shorten long pathology names for better visualization
+shortened_class_names = []
+for name in class_names:
+    if len(name) > 15:
+        shortened_class_names.append(name[:13] + "...")
+    else:
+        shortened_class_names.append(name)
+
+# PLOT 2: Logistic Regression Confusion Matrix (separate figure)
+plt.figure(figsize=(14, 12))
+plt.title("Logistic Regression: Confusion Matrix", fontsize=16)
+sns.heatmap(cm_log_reg, annot=True, fmt='d', cmap='Blues',
+           xticklabels=shortened_class_names, yticklabels=shortened_class_names)
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.xticks(rotation=45, ha="right")
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+# PLOT 3: Random Forest Confusion Matrix (separate figure)
+plt.figure(figsize=(14, 12))
+plt.title("Random Forest: Confusion Matrix", fontsize=16)
+sns.heatmap(cm_rf, annot=True, fmt='d', cmap='Greens',
+           xticklabels=shortened_class_names, yticklabels=shortened_class_names)
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.xticks(rotation=45, ha="right")
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+# PLOT 4: MLP Classifier Confusion Matrix (separate figure)
+plt.figure(figsize=(14, 12))
+plt.title("MLP Classifier: Confusion Matrix", fontsize=16)
+sns.heatmap(cm_mlp, annot=True, fmt='d', cmap='Purples',
+           xticklabels=shortened_class_names, yticklabels=shortened_class_names)
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.xticks(rotation=45, ha="right")
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+
+#######################################################
+def analyze_errors(model_name, y_true, y_pred, class_names):
+    # Find indices of misclassified samples
+    error_indices = np.where(y_pred != y_true)[0]
     
-    # Ensure the 'Plots' directory exists for saving confusion matrices if needed later
-    # For now, we will just display them as per your snippets.
-    if not os.path.exists("Plots"):
-        os.makedirs("Plots")
-        print("Created 'Plots' directory for saving figures.")
-
-    # Load transformers to get pathology class names
-    print(f"Loading transformers from: {transformers_path}")
-    transformers = joblib.load(transformers_path)
-    pathology_encoder_classes = transformers.get('pathology_encoder_classes')
-    if pathology_encoder_classes is None:
-        print("Error: 'pathology_encoder_classes' not found in transformers.joblib.")
-        print("Please ensure your preprocessing script saves this. Exiting.")
-        exit()
-    print(f"Pathology classes loaded: {len(pathology_encoder_classes)} classes.")
-
-    # Load test data
-    X_test, y_test = load_data(test_file_path)
-    if X_test is None: # Basic check
-        print("Exiting due to error in loading test data.")
-        exit()
-
-    # Store predictions and metrics for each model
-    model_predictions = {}
-    all_model_metrics_summary = {} # For scalar metrics for tables/bar charts
+    if len(error_indices) == 0:
+        print(f"No errors for {model_name}!")
+        return
     
-    # Load models, make predictions, and calculate initial metrics
-    for model_name, model_path in model_paths_and_names.items():
-        if os.path.exists(model_path):
-            print(f"\nLoading and predicting with model: {model_name} from {model_path}")
-            model = joblib.load(model_path)
-            y_pred = model.predict(X_test)
-            model_predictions[model_name] = y_pred
-            
-            # Calculate and store metrics
-            metrics = calculate_all_metrics(y_test, y_pred, pathology_encoder_classes, model_name)
-            all_model_metrics_summary[model_name] = {
-                'Accuracy': metrics['Accuracy'],
-                'Precision': metrics['Precision (Weighted)'], # Using weighted for bar chart consistency
-                'Recall': metrics['Recall (Weighted)'],     # Using weighted for bar chart consistency
-                'F1-score': metrics['F1-score (Weighted)'] # Using weighted for bar chart consistency
-            }
-        else:
-            print(f"Warning: Model file not found for {model_name} at {model_path}. Skipping.")
-            # Add placeholder predictions and metrics if model is missing to avoid crashing plots
-            # Or, adjust plotting logic to handle missing models
-            model_predictions[model_name] = np.zeros_like(y_test) # Placeholder
-            all_model_metrics_summary[model_name] = {'Accuracy': 0, 'Precision': 0, 'Recall': 0, 'F1-score': 0}
-
-
-    # --- Plotting based on your snippets ---
+    # Count errors by true class
+    error_by_class = {}
+    for idx in error_indices:
+        true_class = y_true[idx]
+        pred_class = y_pred[idx]
+        
+        true_class_name = class_names[true_class]
+        pred_class_name = class_names[pred_class]
+        
+        if true_class_name not in error_by_class:
+            error_by_class[true_class_name] = {'count': 0, 'predictions': {}}
+        
+        error_by_class[true_class_name]['count'] += 1
+        
+        if pred_class_name not in error_by_class[true_class_name]['predictions']:
+            error_by_class[true_class_name]['predictions'][pred_class_name] = 0
+        
+        error_by_class[true_class_name]['predictions'][pred_class_name] += 1
     
-    # Data for plots - ensure order matches your labels
-    # Your snippet had 'Neural Network (MLP)' then 'Random Forest' then 'Logistic Regression'
-    # My loop is "Logistic Regression", "Random Forest", "MLP Classifier"
-    # I will use the order from my loop for consistency with calculated metrics.
+    # Sort by number of errors
+    sorted_errors = sorted(error_by_class.items(), 
+                          key=lambda x: x[1]['count'], reverse=True)
     
-    plot_labels_ordered = ["Random Forest", "MLP Classifier", "Logistic Regression"] # Consistent order for plots
-    
-    # Ensure all models in plot_labels_ordered exist in all_model_metrics_summary
-    for label in plot_labels_ordered:
-        if label not in all_model_metrics_summary:
-            print(f"Warning: Model '{label}' not found in calculated metrics. Plots may be incorrect or fail.")
-            # Add placeholder if missing to prevent crash, though ideally all models are present
-            if label not in all_model_metrics_summary:
-                 all_model_metrics_summary[label] = {'Accuracy': 0, 'Precision': 0, 'Recall': 0, 'F1-score': 0}
+    # Display top 5 classes with most errors
+    print(f"\nTop 5 misclassified pathologies for {model_name}:")
+    for class_name, error_info in sorted_errors[:5]:
+        print(f"\n{class_name} - {error_info['count']} errors")
+        print("  Most frequently predicted as:")
+        
+        # Sort and show top 3 incorrect predictions
+        sorted_preds = sorted(error_info['predictions'].items(), 
+                             key=lambda x: x[1], reverse=True)
+        for wrong_class, count in sorted_preds[:3]:
+            print(f"  - {wrong_class}: {count} times")
 
-
-    # Comparing the Models for Accuracy
-    plt.figure(figsize=(8,6))
-    accuracy_values = [all_model_metrics_summary[model]['Accuracy'] for model in plot_labels_ordered]
-    plt.bar(plot_labels_ordered, accuracy_values, color=['green', 'cyan', 'yellow'])
-    plt.title("Comparison of Models for Accuracy")
-    plt.ylabel("Accuracy of the Model")
-    plt.ylim(0, 1)
-    plt.xticks(rotation=20, ha="right")
-    plt.tight_layout()
-    plt.show()
-
-    # Comparison for Precision (Weighted)
-    plt.figure(figsize=(8,6))
-    precision_values = [all_model_metrics_summary[model]['Precision'] for model in plot_labels_ordered]
-    plt.bar(plot_labels_ordered, precision_values, color=['green', 'cyan', 'yellow'])
-    plt.title("Comparison of Models for Weighted Precision")
-    plt.ylabel("Weighted Precision of the Model") # Corrected Y-axis label
-    plt.ylim(0, 1)
-    plt.xticks(rotation=20, ha="right")
-    plt.tight_layout()
-    plt.show()
-
-    # Comparison for F1 score (Weighted)
-    plt.figure(figsize=(8,6))
-    f1_values = [all_model_metrics_summary[model]['F1-score'] for model in plot_labels_ordered]
-    plt.bar(plot_labels_ordered, f1_values, color=['green', 'cyan', 'yellow'])
-    plt.title("Comparison of Models for Weighted F1-score")
-    plt.ylabel("Weighted F1-score of the Model") # Corrected Y-axis label
-    plt.ylim(0, 1)
-    plt.xticks(rotation=20, ha="right")
-    plt.tight_layout()
-    plt.show()
-
-    # Combined metrics plot
-    # The user's snippet for this part was slightly different, adapting it:
-    # metrics_df = pd.DataFrame(metrics, index=['Accuracy', 'Precision', 'Recall', 'F1-score']).T
-    # This structure is for a single model's metrics. We need to adapt for multiple models.
-    
-    # Reconstruct metrics_df for the combined plot as per user's snippet style
-    # The keys in all_model_metrics_summary are 'Accuracy', 'Precision', 'Recall', 'F1-score'
-    metrics_for_df_plot = {}
-    for model_name_key in plot_labels_ordered: # Use the defined order
-        # Ensure model_name_key is exactly as in all_model_metrics_summary keys
-        # The keys in all_model_metrics_summary are "Logistic Regression", "Random Forest", "MLP Classifier"
-        # The plot_labels_ordered is ["Random Forest", "MLP Classifier", "Logistic Regression"]
-        # Need to map them if they are different or ensure consistency.
-        # For simplicity, let's assume plot_labels_ordered matches the keys in all_model_metrics_summary
-        if model_name_key in all_model_metrics_summary:
-             metrics_for_df_plot[model_name_key] = [
-                all_model_metrics_summary[model_name_key]['Accuracy'],
-                all_model_metrics_summary[model_name_key]['Precision'], # This is Weighted Precision
-                all_model_metrics_summary[model_name_key]['Recall'],    # This is Weighted Recall
-                all_model_metrics_summary[model_name_key]['F1-score'] # This is Weighted F1-score
-            ]
-        else: # Should not happen if check above is done
-            metrics_for_df_plot[model_name_key] = [0,0,0,0]
-
-
-    metrics_df_transposed = pd.DataFrame(metrics_for_df_plot, index=['Accuracy', 'Precision (W)', 'Recall (W)', 'F1-score (W)'])
-    # Transpose it to have models as rows, metrics as columns, then plot
-    metrics_df_transposed.T.plot(kind='bar', figsize=(12, 8))
-    plt.title('Model Comparison: Accuracy, Weighted Precision, Weighted Recall, Weighted F1-score')
-    plt.ylabel('Score')
-    plt.ylim(0, 1.05) # Adjusted ylim slightly for legend
-    plt.xticks(rotation=0) # Model names on x-axis
-    #plt.xlabel('Performance Metric') # X-axis label is now 'Model' due to transpose
-    plt.xlabel('Model')
-    plt.legend(title='Performance Metric', loc='lower right') # Legend title is now 'Performance Metric'
-    plt.grid(axis='y', linestyle='--')
-    plt.tight_layout()
-    plt.show()
-
-    # Confusion Matrices (for the first 30 samples as per your snippet)
-    num_samples_for_cm = 30
-    y_test_subset = y_test[:num_samples_for_cm]
-    
-    # Ensure class names for CM display are also subset if y_test_subset doesn't contain all classes
-    # However, ConfusionMatrixDisplay typically handles this by showing only relevant classes or all original classes
-    # For simplicity, we use all original class names.
-    
-    # Confusion Matrix for Logistic Regression
-    if "Logistic Regression" in model_predictions:
-        y_pred_log_reg_subset = model_predictions["Logistic Regression"][:num_samples_for_cm]
-        cm_log_reg = confusion_matrix(y_test_subset, y_pred_log_reg_subset, labels=np.unique(np.concatenate((y_test_subset,y_pred_log_reg_subset))))
-        disp_log_reg = ConfusionMatrixDisplay(confusion_matrix=cm_log_reg, display_labels=np.unique(np.concatenate((y_test_subset,y_pred_log_reg_subset)))) # Use unique labels present in subset
-        disp_log_reg.plot(cmap='Blues')
-        plt.title(f"Confusion Matrix for Logistic Regression (First {num_samples_for_cm} Samples)")
-        plt.show()
-
-    # Confusion Matrix for Random Forest
-    if "Random Forest" in model_predictions:
-        y_pred_rf_subset = model_predictions["Random Forest"][:num_samples_for_cm]
-        cm_rf = confusion_matrix(y_test_subset, y_pred_rf_subset, labels=np.unique(np.concatenate((y_test_subset,y_pred_rf_subset))))
-        disp_rf = ConfusionMatrixDisplay(confusion_matrix=cm_rf, display_labels=np.unique(np.concatenate((y_test_subset,y_pred_rf_subset))))
-        disp_rf.plot(cmap='Greens')
-        plt.title(f"Confusion Matrix for Random Forest (First {num_samples_for_cm} Samples)")
-        plt.show()
-
-    # Confusion Matrix for Neural Network (MLP Classifier)
-    if "MLP Classifier" in model_predictions:
-        y_pred_mlp_subset = model_predictions["MLP Classifier"][:num_samples_for_cm]
-        cm_mlp = confusion_matrix(y_test_subset, y_pred_mlp_subset, labels=np.unique(np.concatenate((y_test_subset,y_pred_mlp_subset))))
-        # User snippet had disprand_forest here, correcting to disp_mlp
-        disp_mlp = ConfusionMatrixDisplay(confusion_matrix=cm_mlp, display_labels=np.unique(np.concatenate((y_test_subset,y_pred_mlp_subset))))
-        disp_mlp.plot(cmap='Greys') # User snippet had 'Greys', keeping it. Could also use 'Oranges' or 'Purples' for MLP
-        plt.title(f"Confusion Matrix for Neural Network (MLP) (First {num_samples_for_cm} Samples)")
-        plt.show()
-
-    print("\nDetailed model evaluation and comparison plotting complete.")
-
+# Analyze errors for each model
+analyze_errors("Logistic Regression", y_test, y_pred_log_reg, class_names)
+analyze_errors("Random Forest", y_test, y_pred_rf, class_names)
+analyze_errors("MLP Classifier", y_test, y_pred_mlp, class_names)
