@@ -5,14 +5,10 @@ import seaborn as sns
 import json
 import ast
 from collections import Counter
-import os
 
 # Set up plot styles
 plt.style.use('ggplot')
 sns.set(font_scale=1.2)
-
-# Create output directory for visualizations
-os.makedirs('visualizations', exist_ok=True)
 
 # Load data files
 train_df = pd.read_csv("Data/train.csv")
@@ -127,8 +123,63 @@ plt.tight_layout()
 plt.savefig('visualizations/pathology_by_age.png')
 plt.close()
 
-# 6. Find correlations between features and conditions
-# This requires accessing the processed features after one-hot encoding
+# 6. Find correlations between features and the target condition
+print("\n--- Feature-Target Correlation Analysis ---")
+
+# Load processed training data
+processed_train_df = pd.read_csv("Data/prepared_train.csv")
+
+print(f"Processed training data shape: {processed_train_df.shape}")
+print(f"Number of features after preprocessing: {processed_train_df.shape[1] - 1}")  # -1 for the target
+
+# Get feature columns (all except target)
+feature_cols = [col for col in processed_train_df.columns if col != 'PATHOLOGY_ENCODED']
+
+# Calculate correlation with target
+target_correlations = processed_train_df[feature_cols].corrwith(processed_train_df['PATHOLOGY_ENCODED'])
+
+# Convert to absolute values and sort
+abs_correlations = target_correlations.abs().sort_values(ascending=False)
+
+# Display top correlated features
+print("\nTop 15 features with highest correlation to pathology:")
+for feature, corr in abs_correlations.head(15).items():
+    print(f"{feature}: {corr:.4f}")
+
+# Visualize top correlated features
+plt.figure(figsize=(12, 8))
+top_features = abs_correlations.head(15).index
+top_corrs = abs_correlations.head(15).values
+
+# Create horizontal bar chart
+sns.barplot(x=top_corrs, y=top_features)
+plt.title('Top 15 Features Correlated with Pathology')
+plt.xlabel('Absolute Correlation Value')
+plt.tight_layout()
+plt.savefig('visualizations/top_correlated_features.png')
+plt.close()
+
+# Create correlation matrix for top features and target
+top_features_list = list(top_features)
+top_features_list.append('PATHOLOGY_ENCODED')  # Add target
+
+# Get correlation matrix for top features and target
+correlation_matrix = processed_train_df[top_features_list].corr()
+
+# Plot correlation heatmap
+plt.figure(figsize=(12, 10))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', 
+            fmt=".2f", linewidths=0.5, vmin=-1, vmax=1)
+plt.title('Correlation Matrix: Top Features vs Target')
+plt.tight_layout()
+plt.savefig('visualizations/feature_target_correlation_matrix.png')
+plt.close()
+
+# Print summary insights
+print("\n--- Key Insights from Correlation Analysis ---")
+print(f"1. The feature most strongly correlated with pathology is '{abs_correlations.index[0]}' (correlation: {abs_correlations.iloc[0]:.4f})")
+print(f"2. There are {len(abs_correlations[abs_correlations > 0.2])} features with correlation > 0.2 with the target")
+print(f"3. The average correlation strength of the top 15 features is {abs_correlations.head(15).mean():.4f}")
 
 # Output summary of findings
 print("\n--- Key Insights from Data Exploration ---")
