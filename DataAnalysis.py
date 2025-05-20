@@ -134,14 +134,22 @@ plt.tight_layout()
 plt.savefig('visualizations/pathology_by_age.png')
 plt.close()
 
+# Load processed training data
+print("\n--- Features Before Selection ---")
+processed_train_df = pd.read_csv("Data/prepared_train.csv")
+num_features_after_preprocessing = processed_train_df.shape[1] - 1  # -1 for the target column
+print(f"Number of features after preprocessing (before feature selection): {num_features_after_preprocessing}")
+
+# Print number of features after feature selection
+print("\n--- Features After Selection ---")
+# Count features after feature selection
+reduced_train_df = pd.read_csv("Data/reduced_prepared_train.csv")
+num_features_after_selection = reduced_train_df.shape[1] - 1  # -1 for the target column
+print(f"Number of features after feature selection: {num_features_after_selection}")
+
+
 # 6. Find correlations between features and the target condition
 print("\n--- Feature-Target Correlation Analysis ---")
-
-# Load processed training data
-processed_train_df = pd.read_csv("Data/prepared_train.csv")
-
-print(f"Processed training data shape: {processed_train_df.shape}")
-print(f"Number of features after preprocessing: {processed_train_df.shape[1] - 1}")  # -1 for the target
 
 # Get feature columns (all except target)
 feature_cols = processed_train_df.drop('PATHOLOGY_ENCODED', axis=1).columns
@@ -232,6 +240,44 @@ plt.tight_layout()
 plt.savefig('visualizations/tsne_visualization.png')
 plt.close()
 print("t-SNE visualization saved to visualizations/tsne_visualization.png")
+
+# 8. Feature Type Distribution Analysis
+print("\n--- Feature Type Distribution Analysis ---")
+
+# Count feature types
+feature_types = {"Binary": 0, "Categorical": 0, "Multi-choice": 0}
+
+# Process each evidence and count by type
+for evidence_code, evidence_details in evidences_data.items():
+    data_type = evidence_details.get('data_type')
+    
+    if data_type == 'B':
+        feature_types["Binary"] += 1
+    elif data_type == 'C':
+        feature_types["Categorical"] += 1
+    elif data_type == 'M':
+        feature_types["Multi-choice"] += 1
+    else:
+        print(f"Warning: Unknown data_type '{data_type}' for evidence {evidence_details.get('name')}")
+
+# Print summary
+total_features = sum(feature_types.values())
+print(f"Total features: {total_features}")
+for feature_type, count in feature_types.items():
+    percentage = (count / total_features) * 100
+    print(f"- {feature_type}: {count} ({percentage:.1f}%)")
+
+# Create pie chart of feature types
+plt.figure(figsize=(8, 6))
+colors = ['#ff9999','#66b3ff','#99ff99']
+plt.pie(feature_types.values(), labels=feature_types.keys(), 
+        autopct='%1.1f%%', startangle=90, colors=colors)
+plt.axis('equal')
+plt.title('Feature Types Distribution')
+plt.tight_layout()
+plt.savefig('visualizations/feature_types_distribution.png')
+plt.close()
+print("Feature type distribution visualization saved to 'visualizations/feature_types_distribution.png'")
 
 # Output summary of findings
 print("\n--- Key Insights from Data Exploration ---")
