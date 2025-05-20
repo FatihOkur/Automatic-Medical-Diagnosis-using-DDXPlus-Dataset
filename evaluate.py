@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.inspection import permutation_importance
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -127,6 +128,65 @@ for i, bar in enumerate(bars):
 
 plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust for suptitle
 plt.show()
+
+# Add this after the existing model evaluation code but before plotting the confusion matrices
+print("\n--- Analyzing Feature Importance ---")
+
+# Function to plot feature importance
+def plot_feature_importance(importance, feature_names, title, filename):
+    plt.figure(figsize=(12, 10))
+    # Get top 20 features or all if less than 20
+    n_features = min(20, len(importance))
+    indices = np.argsort(importance)[-n_features:]
+    plt.barh(range(n_features), importance[indices])
+    plt.yticks(range(n_features), [feature_names[i] for i in indices])
+    plt.title(title)
+    plt.xlabel('Importance Score')
+    plt.tight_layout()
+    plt.savefig(f'visualizations/{filename}')
+    plt.close()
+    
+    # Print top 5 most important features
+    print(f"\nTop 5 most important features for {title}:")
+    for i in reversed(indices[-5:]):
+        print(f"  - {feature_names[i]}: {importance[i]:.4f}")
+
+# Feature names
+feature_names = X_test.columns
+
+# 1. Logistic Regression feature importance (coefficient-based)
+print("Analyzing Logistic Regression feature importance...")
+if hasattr(log_reg, 'coef_'):
+    # For multiclass, take the mean of absolute coefficients across all classes
+    importance = np.mean(np.abs(log_reg.coef_), axis=0)
+    plot_feature_importance(importance, feature_names, 
+                           "Logistic Regression Feature Importance", 
+                           "logistic_regression_importance.png")
+
+# 2. Random Forest feature importance
+print("Analyzing Random Forest feature importance...")
+if hasattr(random_forest, 'feature_importances_'):
+    importance = random_forest.feature_importances_
+    plot_feature_importance(importance, feature_names,
+                           "Random Forest Feature Importance",
+                           "random_forest_importance.png")
+
+# 3. MLP feature importance using permutation importance
+print("Analyzing MLP feature importance using permutation importance (this may take a while)...")
+# Use a smaller subset for permutation_importance to save time
+sample_size = min(1000, len(X_test))
+X_sample = X_test.iloc[:sample_size]
+y_sample = y_test.iloc[:sample_size]
+
+if hasattr(mlp_classifier, 'predict'):
+    # Use n_repeats=3 for faster computation
+    perm_importance = permutation_importance(mlp_classifier, X_sample, y_sample, 
+                                           n_repeats=3, random_state=42)
+    importance = perm_importance.importances_mean
+    plot_feature_importance(importance, feature_names,
+                           "Neural Network (MLP) Feature Importance",
+                           "mlp_importance.png")
+
 
 # Shorten long pathology names for better visualization
 shortened_class_names = []
