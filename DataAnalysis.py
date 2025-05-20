@@ -42,6 +42,17 @@ print(f"Number of evidence types: {len(evidences_data)}")
 print("\nDataset structure:")
 print(train_df.dtypes)
 
+# Check for missing values
+print("\n--- Missing Values Analysis ---")
+print("Missing values in train dataset:")
+print(train_df.isnull().sum())
+
+print("Missing values in train dataset:")
+print(validate_df.isnull().sum())
+
+print("Missing values in train dataset:")
+print(test_df.isnull().sum())
+
 # 2. Target Variable Analysis
 pathology_counts = train_df['PATHOLOGY'].value_counts()
 
@@ -133,7 +144,7 @@ print(f"Processed training data shape: {processed_train_df.shape}")
 print(f"Number of features after preprocessing: {processed_train_df.shape[1] - 1}")  # -1 for the target
 
 # Get feature columns (all except target)
-feature_cols = [col for col in processed_train_df.columns if col != 'PATHOLOGY_ENCODED']
+feature_cols = processed_train_df.drop('PATHOLOGY_ENCODED', axis=1).columns
 
 # Calculate correlation with target
 target_correlations = processed_train_df[feature_cols].corrwith(processed_train_df['PATHOLOGY_ENCODED'])
@@ -180,6 +191,47 @@ print("\n--- Key Insights from Correlation Analysis ---")
 print(f"1. The feature most strongly correlated with pathology is '{abs_correlations.index[0]}' (correlation: {abs_correlations.iloc[0]:.4f})")
 print(f"2. There are {len(abs_correlations[abs_correlations > 0.2])} features with correlation > 0.2 with the target")
 print(f"3. The average correlation strength of the top 15 features is {abs_correlations.head(15).mean():.4f}")
+
+# 7. t-distributed Stochastic Neighbor Embedding (t-SNE) visualization
+print("\n--- t-SNE Visualization of Patient Features ---")
+from sklearn.manifold import TSNE
+
+# Use processed training data for t-SNE visualization
+X = processed_train_df.drop('PATHOLOGY_ENCODED', axis=1).values
+y = processed_train_df['PATHOLOGY_ENCODED'].values
+
+# Sample data if it's too large (t-SNE is computationally expensive)
+if len(X) > 5000:
+    print(f"Sampling 5000 records from {len(X)} for t-SNE visualization")
+    from sklearn.model_selection import train_test_split
+    X_sample, _, y_sample, _ = train_test_split(
+        X, y, train_size=5000, random_state=42, stratify=y
+    )
+else:
+    X_sample = X
+    y_sample = y
+
+print(f"Running t-SNE on {len(X_sample)} samples...")
+# Apply t-SNE
+tsne = TSNE(n_components=2, perplexity=30, random_state=42)
+X_tsne = tsne.fit_transform(X_sample)
+print("t-SNE transformation complete")
+
+# Create scatter plot of t-SNE results
+plt.figure(figsize=(12, 10))
+scatter = plt.scatter(X_tsne[:, 0], X_tsne[:, 1], c=y_sample, cmap='viridis', alpha=0.7)
+
+# Add a colorbar legend
+legend1 = plt.colorbar(scatter)
+legend1.set_label('Pathology Class')
+
+plt.title("t-SNE Projection of Patient Features")
+plt.xlabel("t-SNE Component 1")
+plt.ylabel("t-SNE Component 2")
+plt.tight_layout()
+plt.savefig('visualizations/tsne_visualization.png')
+plt.close()
+print("t-SNE visualization saved to visualizations/tsne_visualization.png")
 
 # Output summary of findings
 print("\n--- Key Insights from Data Exploration ---")
