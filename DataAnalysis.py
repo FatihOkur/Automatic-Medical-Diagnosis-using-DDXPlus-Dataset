@@ -29,6 +29,30 @@ def parse_evidences(evidence_str):
 # Apply function to create parsed evidences column
 train_df['EVIDENCES_PARSED'] = train_df['EVIDENCES'].apply(parse_evidences)
 
+def check_invalid_data(df, conditions_data):
+    """
+    Performs basic validation checks on the dataset
+    """
+    print("\n--- Invalid Data Check ---")
+     
+    # 1. Check for invalid age values (negative or extremely high)
+    invalid_age = df[(df['AGE'] < 0) | (df['AGE'] > 120)].shape[0]
+    print(f"Patients with invalid age (<0 or >120): {invalid_age}")
+    
+    # 2. Check for invalid sex values (not 'M' or 'F')
+    invalid_sex = df[~df['SEX'].isin(['M', 'F'])].shape[0]
+    print(f"Patients with invalid sex (not 'M' or 'F'): {invalid_sex}")
+    
+    # 3. Check for invalid pathologies (not in our conditions list)
+    valid_pathologies = list(conditions_data.keys())
+    invalid_pathology = df[~df['PATHOLOGY'].isin(valid_pathologies)].shape[0]
+    print(f"Patients with invalid pathology: {invalid_pathology}")
+    
+    print("Invalid data check complete")
+
+# Check for invalid data
+check_invalid_data(train_df, conditions_data)
+
 # 1. Basic Dataset Information
 print("--- Basic Dataset Information ---")
 print(f"Total samples: {len(train_df) + len(validate_df) + len(test_df)}")
